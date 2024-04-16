@@ -170,7 +170,7 @@ def check_update(update:bool = False):
             new_bqckup = "/tmp/bqckup"
 
             try:
-                wget.download(f"https://download.bqckup.com/{latest_version}/bqckup.tar.gz", tmp_file)
+                wget.download(f"https://downloads.bqckup.com/{latest_version}/bqckup.tar.gz", tmp_file)
                 os.system(f"tar xvf {tmp_file} -C /tmp")
             except Exception as e:
                 print(f"[red] Failed to download update, {str(e)} [/red]")
