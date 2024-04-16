@@ -108,7 +108,7 @@ def generate_link(storage: str, key:str, expire:int = 86400):
         print(f"[red] Failed to generate link, {str(e)} [/red]")
 
 @bq_cli.command()
-def get_list(name: str):
+def get_list(name: str, json: bool = False):
     node = Bqckup().detail(name)
 
     if not node:
@@ -124,17 +124,29 @@ def get_list(name: str):
     
     table = Table("#", "Key", "Created at")
     
-    for i, backup in enumerate(backups.get('Contents')):
-        backup['Key'] = backup['Key'].replace('bqckup/', '')
-        table.add_row(str(i+1), backup['Key'], backup['LastModified'].strftime("%d %b %Y %H:%M:%S"))
-    
-    Console().print(table)
+    if json:
+        contents = backups.get('Contents')
+        results = []
+        for content in contents:
+            result = {
+                "key": content.get('Key').replace('bqckup/', ''),
+                "date": content.get('LastModified').strftime("%d %b %Y %H:%M:%S"),
+                "size": content.get('Size')
+            }
+            results.append(result)
+        print(results)
+    else:
+        for i, backup in enumerate(backups.get('Contents')):
+            backup['Key'] = backup['Key'].replace('bqckup/', '')
+            table.add_row(str(i+1), backup['Key'], backup['LastModified'].strftime("%d %b %Y %H:%M:%S"))
+        
+        Console().print(table)
 
-    print("\n[yellow]Tips: [/yellow]")
-    print("You can generate a download link by running this command:\n")
-    print(f"bqckup generate-link {node['options']['storage']} <Key>\n")
-    print("Example:")
-    print(f"bqckup generate-link {node['options']['storage']} '{backups.get('Contents')[0].get('Key')}'\n")
+        print("\n[yellow]Tips: [/yellow]")
+        print("You can generate a download link by running this command:\n")
+        print(f"bqckup generate-link {node['options']['storage']} <Key>\n")
+        print("Example:")
+        print(f"bqckup generate-link {node['options']['storage']} '{backups.get('Contents')[0].get('Key')}'\n")
 
 @bq_cli.command()
 def check_update(update:bool = False):
