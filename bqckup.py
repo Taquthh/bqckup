@@ -1,8 +1,15 @@
-import typer, getpass, os, requests
+import typer
+import os
+import requests
+import re
+import ruamel.yaml as yaml
 from classes.bqckup import Bqckup
+from classes.database import Database
 from classes.config import Config
 from classes.storage import Storage
 from classes.s3 import s3
+from pathlib import Path
+from typing import List
 from constant import VERSION, SITE_CONFIG_PATH
 from rich import print
 from rich.console import Group, Console
@@ -11,19 +18,98 @@ from rich.panel import Panel
 
 bq_cli = typer.Typer()
 
+
 @bq_cli.command()
+def add_site(
+        name: str = typer.Option(),
+        path: List[str] = typer.Option(),
+        storage: str = typer.Option(),
+        db_name: str = typer.Option(),
+        db_user: str = typer.Option(),
+        db_pass: str = typer.Option(),
+        db_host: str = typer.Option(default="localhost"),
+        db_port: int = typer.Option(default=3306),
+        interval: str = typer.Option(default='daily'),
+        retention: int = typer.Option(default=7),
+        save_locally: bool = typer.Option(default=False)
+):
+    # Check if name contain space or any symbol except dot and underscore
+
+    if not re.match("^[a-zA-Z0-9_.-]*$", name):
+        print("Name should not contain any space or special character except dot and underscore")
+        raise typer.Exit(code=1)
+
+    # Check paths
+    for p in path:
+        if not os.path.exists(p):
+            print(f"Path '{p}' not found")
+            raise typer.Exit(code=1)
+
+    # Check Database Connection
+    Database().test_connection({
+        "user": db_user,
+        "password": db_pass,
+        "host": db_host,
+        "name": db_name
+    })
+
+    # Interval only daily, weekly, monthly
+    if interval not in ['daily', 'weekly', 'monthly']:
+        print("Interval should be daily, weekly or monthly")
+        raise typer.Exit(code=1)
+
+    config = {
+        'bqckup': {
+            'name': name,
+            'path': path,
+            'database': {
+                'type': 'mysql',  # Currently only support mysql
+                'host': db_host,
+                'port': db_port,
+                'user': db_user,
+                'password': db_pass,
+                'name': db_name
+            },
+            'options': {
+                'storage': storage,
+                'interval': interval,
+                'retention': retention,
+                'save_locally': save_locally,
+                'notification_email': 'email@example.com',
+                'provider': 's3'
+            }
+        }
+    }
+
+    try:
+        with open(os.path.join(SITE_CONFIG_PATH, f"{name}.yml"), "w") as file:
+            yml = yaml.YAML()
+            yml.indent(sequence=4, offset=2)
+            yml.dump(config, file)
+
+        print(f"Backup configuration file '{name}.yaml' created successfully!")
+    except Exception as e:
+        print(f"Failed to create backup configuration file: {e}")
+        raise typer.Exit(code=1)
+
+
+@ bq_cli.command()
 def get_information():
     content = Group(
         Panel("Version  : %s" % VERSION),
         Panel("Github   : https://github.com/bqckup/bqckup"),
     )
-    print(Panel.fit(content, title="Bqckup information", title_align="left", border_style="yellow"))
+    print(
+        Panel.fit(content, title="Bqckup information",
+                  title_align="left", border_style="yellow"))
 
-@bq_cli.command()
+
+@ bq_cli.command()
 def test_config():
     sites = Bqckup().list()
     if not sites:
         print("No site found")
+        raise typer.Exit(code=1)
     else:
         # Storage config test
 
@@ -33,18 +119,21 @@ def test_config():
         table.add_column("Config Path", style="cyan")
         table.add_column("Status", style="cyan")
         for i in sites:
-            table.add_row(sites[i]['name'], os.path.join(SITE_CONFIG_PATH, sites[i]['file_name']), 'OK', style="red")
+            table.add_row(sites[i]['name'], os.path.join(
+                SITE_CONFIG_PATH, sites[i]['file_name']), 'OK', style="red")
 
         Console().print(table)
-        
-@bq_cli.command()
-def run(force:bool = False):
+
+
+@ bq_cli.command()
+def run(force: bool = False):
     Bqckup().backup(force=force)
-    
-@bq_cli.command()
+
+
+@ bq_cli.command()
 def gui_active():
     from gevent.pywsgi import WSGIServer
-    
+
     try:
         port = int(Config().read('web', 'port'))
         http_server = WSGIServer(('0.0.0.0', port), app)
@@ -53,19 +142,20 @@ def gui_active():
     except Exception as e:
         print(f"Failed to start web server, {str(e)}")
 
-@bq_cli.command()
+
+@ bq_cli.command()
 def upload_file(storage: str, file: str, save_as: str = None):
     if not os.path.exists(file):
         print(f"[red] File not found [/red]")
         return
-    
+
     if os.path.isdir(file):
         print(f"[red] Cannot upload directory [/red]")
-        return 
-    
+        return
+
     if not save_as:
         save_as = os.path.basename(file)
-    
+
     try:
         # Check if storage exists
         Storage().get_storage_detail(storage)
@@ -75,9 +165,9 @@ def upload_file(storage: str, file: str, save_as: str = None):
     else:
         print(f"[green] File uploaded successfully [/green]")
 
-# Expire is in seconds
-@bq_cli.command()
-def generate_link(storage: str, key:str, expire:int = 86400):
+
+@ bq_cli.command()
+def generate_link(storage: str, key: str, expire: int = 86400):
     from humanfriendly import format_timespan
     from helpers import generate_short_link
 
@@ -103,27 +193,29 @@ def generate_link(storage: str, key:str, expire:int = 86400):
         print(f"[bold purple]CURL[/bold purple]")
         print(f'curl {"" if not shortlink else "-L"} {os.path.basename(key)} "{link.strip()}" > "{os.path.basename(key)}"\n'.strip())
         print(f"\n[bold purple]WGET[/bold purple]")
-        print(f'wget "{link.strip()}" -O "{os.path.basename(key)}" -q --show-progress'.strip())
+        print(
+            f'wget "{link.strip()}" -O "{os.path.basename(key)}" -q --show-progress'.strip())
     except Exception as e:
         print(f"[red] Failed to generate link, {str(e)} [/red]")
 
-@bq_cli.command()
+
+@ bq_cli.command()
 def get_list(name: str, json: bool = False):
     node = Bqckup().detail(name)
 
     if not node:
         print(f"[red] Backup for {name} not found [/red]")
         return None
-    
+
     _s3 = s3(node['options']['storage'])
     backups = _s3.list(f"{_s3.root_folder_name}/{node['name']}")
-    
+
     if not backups or not backups.get('Contents'):
         print(f"[red] No backup found for {name} [/red]")
         return None
-    
+
     table = Table("#", "Key", "Created at")
-    
+
     if json:
         contents = backups.get('Contents')
         results = []
@@ -138,22 +230,26 @@ def get_list(name: str, json: bool = False):
     else:
         for i, backup in enumerate(backups.get('Contents')):
             backup['Key'] = backup['Key'].replace('bqckup/', '')
-            table.add_row(str(i+1), backup['Key'], backup['LastModified'].strftime("%d %b %Y %H:%M:%S"))
-        
+            table.add_row(
+                str(i+1), backup['Key'], backup['LastModified'].strftime("%d %b %Y %H:%M:%S"))
+
         Console().print(table)
 
         print("\n[yellow]Tips: [/yellow]")
         print("You can generate a download link by running this command:\n")
         print(f"bqckup generate-link {node['options']['storage']} <Key>\n")
         print("Example:")
-        print(f"bqckup generate-link {node['options']['storage']} '{backups.get('Contents')[0].get('Key')}'\n")
+        print(
+            f"bqckup generate-link {node['options']['storage']} '{backups.get('Contents')[0].get('Key')}'\n")
 
-@bq_cli.command()
-def check_update(update:bool = False):
+
+@ bq_cli.command()
+def check_update(update: bool = False):
     import wget
     from packaging import version
     try:
-        latest_version = requests.get('https://download.bqckup.com/latest.txt').text.strip()
+        latest_version = requests.get(
+            'https://download.bqckup.com/latest.txt').text.strip()
     except Exception as e:
         print(f"[red] Failed to check update, {str(e)} [/red]")
     else:
@@ -161,7 +257,8 @@ def check_update(update:bool = False):
         same_version = version.parse(VERSION) == version.parse(latest_version)
 
         if same_version:
-            print(f"[bold green]You are using the latest version of Bqckup[/bold green]")
+            print(
+                f"[bold green]You are using the latest version of Bqckup[/bold green]")
             return
 
         if need_update and update:
@@ -170,7 +267,8 @@ def check_update(update:bool = False):
             new_bqckup = "/tmp/bqckup"
 
             try:
-                wget.download(f"https://downloads.bqckup.com/{latest_version}/bqckup.tar.gz", tmp_file)
+                wget.download(
+                    f"https://downloads.bqckup.com/{latest_version}/bqckup.tar.gz", tmp_file)
                 os.system(f"tar xvf {tmp_file} -C /tmp")
             except Exception as e:
                 print(f"[red] Failed to download update, {str(e)} [/red]")
@@ -183,18 +281,19 @@ def check_update(update:bool = False):
                 else:
                     print("[red] Failed to update [/red]")
                 return
-            
+
         print(f"Current Version : {VERSION}")
         print(f"Latest Version  : {latest_version}")
 
+
 if __name__ == "__main__":
-    if getpass.getuser() != 'root':
-        print("Please run this script as root user")
+    # if getpass.getuser() != 'root':
+    #     print("Please run this script as root user")
+    # else:
+    from app import app, initialization
+    try:
+        initialization()
+    except Exception as e:
+        print(f"Failed to initialize, {str(e)}")
     else:
-        from app import app, initialization
-        try:
-            initialization()
-        except Exception as e:
-            print(f"Failed to initialize, {str(e)}")
-        else:
-            bq_cli()
+        bq_cli()
