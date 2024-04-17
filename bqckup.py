@@ -1,3 +1,4 @@
+import getpass
 import typer
 import os
 import requests
@@ -287,13 +288,13 @@ def check_update(update: bool = False):
 
 
 if __name__ == "__main__":
-    # if getpass.getuser() != 'root':
-    #     print("Please run this script as root user")
-    # else:
-    from app import app, initialization
-    try:
-        initialization()
-    except Exception as e:
-        print(f"Failed to initialize, {str(e)}")
+    if getpass.getuser() != 'root':
+        print("Please run this script as root user")
     else:
-        bq_cli()
+        from app import app, initialization
+        try:
+            initialization()
+        except Exception as e:
+            print(f"Failed to initialize, {str(e)}")
+        else:
+            bq_cli()
