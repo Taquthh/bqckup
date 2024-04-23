@@ -249,9 +249,19 @@ class Bqckup:
                         f"{backup_folder}/{os.path.basename(sql_path)}"
                     )
                     
-                    if not backup.get('options').get('save_locally'):
+                    should_save_locally = backup.get('options').get('save_locally')
+                    save_locally_path = backup.get('options').get('destination') # If not set it will be at /etc/bqckup/tmp
+                    
+                    if not should_save_locally:
                         os.unlink(compressed_file)
                         os.unlink(sql_path)
+                    elif should_save_locally and save_locally_path:
+                        if not os.path.isdir(save_locally_path):
+                            raise Exception(f"Save locally path {save_locally_path} is not a directory")
+                        else:
+                            shutil.move(compressed_file, save_locally_path)
+                            shutil.move(sql_path, save_locally_path)
+                        
                 
                     Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
             
