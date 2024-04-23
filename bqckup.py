@@ -80,7 +80,7 @@ def add_site(
                 'storage': storage,
                 'interval': interval,
                 'retention': retention,
-                'save_locally': save_locally,
+                'save_locally': 'yes' if save_locally else 'no',
                 'save_locally_path': save_locally_path,
                 'notification_email': 'email@example.com',
                 'provider': 's3'
