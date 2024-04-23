@@ -251,6 +251,7 @@ def initialization():
                         "interval": "daily",
                         "retention": "7",
                         "save_locally": "no",
+                        "save_locally_path": os.path.join(BQ_PATH, 'tmp'),
                         "notification_email": "email@example.com",
                         "provider": "s3"
                     }
