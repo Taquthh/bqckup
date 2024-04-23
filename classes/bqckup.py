@@ -1,4 +1,4 @@
-import os, time
+import os, time, shutil
 from classes.database import Database
 from classes.storage import Storage
 from classes.tar import Tar
@@ -184,7 +184,6 @@ class Bqckup:
                 Log().update(file_size=os.stat(sql_path).st_size).where(Log.id == log_database.id).execute()
             
             if backup.get('options').get('provider') == 'local':
-                import shutil
                 destination = backup.get('options').get('destination')
                 backup_path = os.path.join(destination, backup_folder)
                 
@@ -250,17 +249,24 @@ class Bqckup:
                     )
                     
                     should_save_locally = backup.get('options').get('save_locally')
-                    save_locally_path = backup.get('options').get('destination') # If not set it will be at /etc/bqckup/tmp
+                    save_locally_path = backup.get('options').get('save_locally_path') # If not set it will be at /etc/bqckup/tmp
                     
                     if not should_save_locally:
                         os.unlink(compressed_file)
                         os.unlink(sql_path)
                     elif should_save_locally and save_locally_path:
+                        print("Saving locally ...")
                         if not os.path.isdir(save_locally_path):
                             raise Exception(f"Save locally path {save_locally_path} is not a directory")
                         else:
-                            shutil.move(compressed_file, save_locally_path)
-                            shutil.move(sql_path, save_locally_path)
+                            try:
+                                save_locally_path = os.path.join(save_locally_path, backup.get('name'))
+                                if not os.path.isdir(save_locally_path):
+                                    os.makedirs(save_locally_path)
+                                shutil.move(compressed_file, save_locally_path)
+                                shutil.move(sql_path, save_locally_path)
+                            except Exception as e:
+                                print(f"Failed to save locally: {e}")
                         
                 
                     Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
