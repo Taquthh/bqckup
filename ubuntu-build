@@ -6,4 +6,4 @@ python3 -m venv venv
 ./venv/bin/python3 -m pip install --upgrade pip
 ./venv/bin/pip3 install wheel
 ./venv/bin/pip3 install -r requirements.txt
-./venv/bin/pyinstaller ./bqckup --onefile --add-data 'templates:templates' --add-data 'static:static'
+./venv/bin/pyinstaller ./bqckup.py --onefile --add-data 'templates:templates' --add-data 'static:static'
