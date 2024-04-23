@@ -11,7 +11,7 @@ from classes.storage import Storage
 from classes.s3 import s3
 from pathlib import Path
 from typing import List
-from constant import VERSION, SITE_CONFIG_PATH
+from constant import VERSION, SITE_CONFIG_PATH, BQ_PATH
 from rich import print
 from rich.console import Group, Console
 from rich.table import Table
@@ -32,10 +32,15 @@ def add_site(
         db_port: int = typer.Option(default=3306),
         interval: str = typer.Option(default='daily'),
         retention: int = typer.Option(default=7),
-        save_locally: bool = typer.Option(default=False)
+        save_locally: bool = typer.Option(default=False),
+        save_locally_path: str = typer.Option(default=os.path.join(BQ_PATH, 'tmp'))
 ):
+    # Check if path is empty
+    if save_locally_path != os.path.join(BQ_PATH, 'tmp') and not os.path.exists(save_locally_path):
+        print(f"Path '{save_locally_path}' not found")
+        raise typer.Exit(code=1)
+    
     # Check if name contain space or any symbol except dot and underscore
-
     if not re.match("^[a-zA-Z0-9_.-]*$", name):
         print("Name should not contain any space or special character except dot and underscore")
         raise typer.Exit(code=1)
@@ -76,6 +81,7 @@ def add_site(
                 'interval': interval,
                 'retention': retention,
                 'save_locally': save_locally,
+                'save_locally_path': save_locally_path,
                 'notification_email': 'email@example.com',
                 'provider': 's3'
             }
