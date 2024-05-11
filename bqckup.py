@@ -297,7 +297,7 @@ if __name__ == "__main__":
     if getpass.getuser() != 'root':
         print("Please run this script as root user")
     else:
-        from app import app, initialization
+        from app import initialization
         try:
             initialization()
         except Exception as e:
