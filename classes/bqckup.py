@@ -6,12 +6,13 @@ from classes.file import File
 from classes.config import Config
 from classes.yml_parser import Yml_Parser
 from models.log import Log
+from models.notification_log import NotificationLog
 from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
 from classes.s3 import s3
 from helpers import difference_in_days, get_today, time_since, get_server_ip
 from datetime import datetime
 from helpers.file_management import remove_folder
-
+from hashlib import sha256
 class ConfigExceptions(Exception):
     pass
 
@@ -290,7 +291,8 @@ class Bqckup:
             should_send_notification = Config().read('notification', 'enabled')
             if should_send_notification == '1':
                 from lib.notifications.discord import send_notification
-                send_notification({
+                
+                payload = {
                     "embeds": [{
                         "title": f"Bqckup Failed",
                         "description": f"This is an automated notification to inform you that the bqckup has failed.",
@@ -303,7 +305,16 @@ class Bqckup:
                         ],
                         "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
                     }]
-                })
+                }
+                
+                hashed_payload = sha256(str(payload).encode()).hexdigest()
+                
+                if not NotificationLog().select().where(NotificationLog.hash == hashed_payload).exists():
+                    send_notification(payload)
+                    NotificationLog().write({
+                        "hash": hashed_payload,
+                        "sent_at": int(time.time())
+                    })
                 
             print(f"[{backup.get('name')}] Error: {e}.")
     
