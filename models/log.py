@@ -1,17 +1,8 @@
 from peewee import *
 import os, time, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from constant import BQ_PATH
+from models import BaseModel
 
-database = SqliteDatabase(
-    os.path.join(BQ_PATH, 'database', 'bqckup.db'),
-    pragmas={ 'journal_mode': 'wal', 'cache_size': -1024 * 64}
-)
-
-class BaseModel(Model):
-    class Meta:
-        database = database  
-        
 class Log(BaseModel):
     # constants
     __SUCCESS__ = 1
@@ -39,15 +30,3 @@ class Log(BaseModel):
             
     def write(self, data: dict):
         return self.create( name=data['name'], file_path=data['file_path'], description=data['description'], created_at=int(time.time()), type=data['type'], storage=data['storage'], status=self.__ON_PROGRESS__ )    
-
-# if __name__ == '__main__':
-#     xx = Log().write({
-#         "name":"test",
-#         "file_path":"test",
-#         "file_size":123,
-#         "description":"test",
-#         "type":"test",
-#         "storage":"test",
-#         "object_name":"test"
-#     })
-#     Log().update_status(xx, Log.__SUCCESS__)
