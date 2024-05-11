@@ -311,10 +311,7 @@ class Bqckup:
                 
                 if not NotificationLog().select().where(NotificationLog.hash == hashed_payload).exists():
                     send_notification(payload)
-                    NotificationLog().write({
-                        "hash": hashed_payload,
-                        "sent_at": int(time.time())
-                    })
+                    NotificationLog().create(hash=hashed_payload, sent_at=int(time.time()))
                 
             print(f"[{backup.get('name')}] Error: {e}.")
     
