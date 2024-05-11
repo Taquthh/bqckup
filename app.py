@@ -4,7 +4,7 @@ from classes.server import Server
 from classes.s3 import s3
 from helpers import today24Format, timeSince, bytes_to
 from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH, VERSION, CONFIG_PATH
-import sys, os, ruamel.yaml as rYaml
+ import sys, os, ruamel.yaml as rYaml
 from datetime import timedelta
 from flask.json import jsonify
 from flask import Flask, render_template, request, redirect, url_for
@@ -227,11 +227,7 @@ def initialization():
         os.system(f"chmod 755 {db_path}")
         database.connect()
         database.create_tables([Log])
-        database.close()
-    else:
-        # Check if table exists
-        database.connect()
-        if not database.table_exists('notification_log'):
+        if not database.table_exists('notification_logs'):
             database.create_tables([NotificationLog])
         database.close()
         
