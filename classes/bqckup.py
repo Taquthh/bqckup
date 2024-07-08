@@ -150,7 +150,7 @@ class Bqckup:
                 
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
 
-            print(f"Compressing {backup['path']} for {backup['name']}")
+            print(f"Compressing {backup['path'][0]} for {backup['name']}")
 
             last_log = self.get_last_log(backup['name'])
             if last_log:
