@@ -150,12 +150,12 @@ class Bqckup:
                 
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
 
-            print(f"Compressing files for {backup['name']}...")
+            print(f"Compressing {backup['path']} for {backup['name']}")
 
             last_log = self.get_last_log(backup['name'])
             if last_log:
                 last_backup_size = last_log.file_size
-                current_file_size = 0  # Initialize with 0 before compression
+                current_file_size = 0 
                 print(f"Last backup file size: {last_backup_size}")
                 
                 # Compress files
@@ -166,14 +166,13 @@ class Bqckup:
 
                 if os.path.exists(compressed_file):
                     current_file_size = os.stat(compressed_file).st_size
+                    print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
+                    print("Please make sure, your set the right file / database for this backup")
+                    print(f"\nLast backup file size: {last_backup_size}")
                     print(f"Current file size: {current_file_size}")
 
                     if current_file_size == last_backup_size:
-                        print(f"Sorry, the file for {backup['name']} ({compressed_filename}) is the same as before.")
-
-                        previous_backup_filename = os.path.basename(last_log.file_path)
-                        print(f"Previous backup file name: {previous_backup_filename}")
-                        return False
+                     return False
 
                     # Write initial log for file compression
                     log_compressed_files = Log().write({
