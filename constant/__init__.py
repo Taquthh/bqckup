@@ -1,7 +1,7 @@
 from os import path
 
 # Bqckup Path
-BQ_PATH = "/etc/bqckup"
+BQ_PATH = "/mnt/c/users/lenovo/downloads/belajar_qu/task/bqckup"
 
 # Bqckup Storage Config Path
 STORAGE_CONFIG_PATH = path.join(BQ_PATH, 'config', 'storages.yml')

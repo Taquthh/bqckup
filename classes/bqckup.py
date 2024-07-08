@@ -18,6 +18,7 @@ class ConfigExceptions(Exception):
 
 class Bqckup:
     def __init__(self):
+        self.last_backup_sizes = {} 
         
         if not os.path.exists(SITE_CONFIG_PATH):
             os.makedirs(SITE_CONFIG_PATH)
@@ -127,6 +128,8 @@ class Bqckup:
                     print(f"Visit: https://bqckup.com\n")
                     continue
                 
+
+                
             self.do_backup(backup['file_name'])
     
     # Upload
@@ -146,20 +149,37 @@ class Bqckup:
                 os.makedirs(tmp_path)
                 
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
-            
+
+            print(f"Compressing files for {backup['name']}...")
+
             log_compressed_files = Log().write({
                 "name": backup['name'],
                 "file_path": compressed_file,
-                "description": "File backup is in progress...",
+                "description": f"File backup is in progress: {os.path.basename(compressed_file)}",
                 "type": Log.__FILES__,
                 "storage": backup['options']['storage']
             })
-            
-            print("\nCompressing files ...")
-            
+
             compressed_file = Tar().compress(backup.get('path'), compressed_file)
-            
-            Log().update(file_size=os.stat(compressed_file).st_size).where(Log.id == log_compressed_files.id).execute()
+
+            if os.path.exists(compressed_file):
+                current_file_size = os.stat(compressed_file).st_size
+                Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
+                Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+                print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
+                
+                last_log = self.get_last_log(backup['name'])
+                if last_log:
+                    last_backup_size = last_log.file_size
+                    if last_backup_size is not None:
+                        print(f"Current file size: {current_file_size}")
+                        print(f"Last backup size: {last_backup_size}")
+                        if current_file_size == last_backup_size:
+                            print(f"Maaf, file untuk {backup['name']} sama seperti sebelumnya.")
+                            # Hentikan proses jika file sama
+                            return False
+                        else:
+                            Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
             
             sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
             
@@ -183,6 +203,8 @@ class Bqckup:
                 )
                 
                 Log().update(file_size=os.stat(sql_path).st_size).where(Log.id == log_database.id).execute()
+
+                Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
             
             if backup.get('options').get('provider') == 'local':
                 destination = backup.get('options').get('destination')
@@ -198,56 +220,64 @@ class Bqckup:
                 if len(folders) > int(backup.get('options').get('retention')):
                     shutil.rmtree(os.path.join(backup_path_without_date, folders[0]))                    
                     
+                # Check if compressed file exists
                 if os.path.exists(compressed_file):
+                    # Move compressed file to destination
                     shutil.move(compressed_file, os.path.join(backup_path, os.path.basename(compressed_file)))
-                    Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
-                
+                    # Update log status to success
+                    
+                else:
+                    print(f"Compressed file {compressed_file} does not exist or could not be moved.")
+
+                # Check if SQL file exists and handle database backup
                 if os.path.exists(sql_path):
                     shutil.move(sql_path, os.path.join(backup_path, os.path.basename(sql_path)))
-                    Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
                     
-            if backup.get('options').get('provider') == 's3':
-                _s3 = s3(storage_name=backup.get('options').get('storage'))
-            
-                # Cleaning Old Folder
-                list_folder = _s3.list(
-                    f"{_s3.root_folder_name}/{backup.get('name')}/"
-                )
+                else:
+                    print(f"SQL file {sql_path} does not exist or could not be moved.")
 
-                last_modified_object  = lambda obj: int(obj['LastModified'].strftime('%s'))
+            # if backup.get('options').get('provider') == 's3':
+            #     _s3 = s3(storage_name=backup.get('options').get('storage'))
+            
+            #     # Cleaning Old Folder
+            #     list_folder = _s3.list(
+            #         f"{_s3.root_folder_name}/{backup.get('name')}/"
+            #     )
+
+            #     last_modified_object  = lambda obj: int(obj['LastModified'].strftime('%s'))
                 
-                sorted_version = []
-                if list_folder.get('Contents'):
-                    for obj in sorted(list_folder.get('Contents'), key=last_modified_object):
-                        folder_name = obj['Key'].replace(os.path.basename(obj['Key']), '')
-                        if folder_name not in sorted_version:
-                            sorted_version.append(folder_name)
+            #     sorted_version = []
+            #     if list_folder.get('Contents'):
+            #         for obj in sorted(list_folder.get('Contents'), key=last_modified_object):
+            #             folder_name = obj['Key'].replace(os.path.basename(obj['Key']), '')
+            #             if folder_name not in sorted_version:
+            #                 sorted_version.append(folder_name)
 
-                if sorted_version and len(sorted_version) > int(backup.get('options').get('retention')):
-                    for obj in list_folder.get('Contents'):
-                        if obj.get('Key').startswith(os.path.dirname(sorted_version[0])):
-                            _s3.delete(obj.get('Key'))
+            #     if sorted_version and len(sorted_version) > int(backup.get('options').get('retention')):
+            #         for obj in list_folder.get('Contents'):
+            #             if obj.get('Key').startswith(os.path.dirname(sorted_version[0])):
+            #                 _s3.delete(obj.get('Key'))
             
-                # bqckup config
-                if Config().read('bqckup', 'config_backup'):
-                    _s3.upload(bqckup_config_location, f"config/{backup.get('name')}.yml", False)
-                    _s3.upload(STORAGE_CONFIG_PATH, 'storages.yml', False)
+            #     # bqckup config
+            #     if Config().read('bqckup', 'config_backup'):
+            #         _s3.upload(bqckup_config_location, f"config/{backup.get('name')}.yml", False)
+            #         _s3.upload(STORAGE_CONFIG_PATH, 'storages.yml', False)
 
-                if os.path.exists(compressed_file):
-                    print(f"\nUploading {compressed_file}\n")
-                    _s3.upload(
-                        compressed_file,
-                        f"{backup_folder}/{os.path.basename(compressed_file)}"
-                    )
-                    Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+            #     if os.path.exists(compressed_file):
+            #         print(f"\nUploading {compressed_file}\n")
+            #         _s3.upload(
+            #             compressed_file,
+            #             f"{backup_folder}/{os.path.basename(compressed_file)}"
+            #         )
+                    # Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
                     
                 
-                if os.path.exists(sql_path):
-                    print(f"\n\nUploading {sql_path}\n")
-                    _s3.upload(
-                        sql_path,
-                        f"{backup_folder}/{os.path.basename(sql_path)}"
-                    )
+            #     if os.path.exists(sql_path):
+            #         print(f"\n\nUploading {sql_path}\n")
+            #         _s3.upload(
+            #             sql_path,
+            #             f"{backup_folder}/{os.path.basename(sql_path)}"
+            #         )
                     
                     should_save_locally = backup.get('options').get('save_locally')
                     save_locally_path = backup.get('options').get('save_locally_path') # If not set it will be at /etc/bqckup/tmp
