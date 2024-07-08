@@ -82,7 +82,6 @@ class Bqckup:
             results[index]['file_name'] = file_name
             results[index]['last_backup'] = log.created_at if log else None
             
-            #test
             # Next Backup
             results[index]['next_backup'] = False
             if results[index]['last_backup']:
