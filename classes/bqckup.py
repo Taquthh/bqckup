@@ -152,34 +152,41 @@ class Bqckup:
 
             print(f"Compressing files for {backup['name']}...")
 
-            log_compressed_files = Log().write({
-                "name": backup['name'],
-                "file_path": compressed_file,
-                "description": f"File backup is in progress: {os.path.basename(compressed_file)}",
-                "type": Log.__FILES__,
-                "storage": backup['options']['storage']
-            })
-
-            compressed_file = Tar().compress(backup.get('path'), compressed_file)
-
-            if os.path.exists(compressed_file):
-                current_file_size = os.stat(compressed_file).st_size
-                Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
-                Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
-                print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
+            last_log = self.get_last_log(backup['name'])
+            if last_log:
+                last_backup_size = last_log.file_size
+                current_file_size = 0  # Initialize with 0 before compression
+                print(f"Last backup file size: {last_backup_size}")
                 
-                last_log = self.get_last_log(backup['name'])
-                if last_log:
-                    last_backup_size = last_log.file_size
-                    if last_backup_size is not None:
-                        print(f"Current file size: {current_file_size}")
-                        print(f"Last backup size: {last_backup_size}")
-                        if current_file_size == last_backup_size:
-                            print(f"Maaf, file untuk {backup['name']} sama seperti sebelumnya.")
-                            # Hentikan proses jika file sama
-                            return False
-                        else:
-                            Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+                # Compress files
+                compressed_file = Tar().compress(backup.get('path'), compressed_file)
+
+                compressed_filename = os.path.basename(compressed_file)
+                print(f"Compressed file name: {compressed_filename}")
+
+                if os.path.exists(compressed_file):
+                    current_file_size = os.stat(compressed_file).st_size
+                    print(f"Current file size: {current_file_size}")
+
+                    if current_file_size == last_backup_size:
+                        print(f"Sorry, the file for {backup['name']} ({compressed_filename}) is the same as before.")
+
+                        previous_backup_filename = os.path.basename(last_log.file_path)
+                        print(f"Previous backup file name: {previous_backup_filename}")
+                        return False
+
+                    # Write initial log for file compression
+                    log_compressed_files = Log().write({
+                        "name": backup['name'],
+                        "file_path": compressed_file,
+                        "description": f"File backup is in progress: {os.path.basename(compressed_file)}",
+                        "type": Log.__FILES__,
+                        "storage": backup['options']['storage']
+                    })
+
+                    Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
+                    Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+                    print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
             
             sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
             
