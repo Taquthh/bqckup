@@ -2,6 +2,13 @@ bqckup:
   name: domain
   path:
     - /var/log
+  database:
+    type: mysql
+    host: localhost
+    port: 3306
+    user: root_db
+    password: coklatmanis
+    name: testing
   options:
     storage: dummy
     interval: daily

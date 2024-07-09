@@ -82,8 +82,6 @@ class Bqckup:
             results[index]['file_name'] = file_name
             results[index]['last_backup'] = log.created_at if log else None
             
-            #test
-            # Next Backup
             results[index]['next_backup'] = False
             if results[index]['last_backup']:
                 next_backup_in_date = datetime.fromtimestamp(results[index]['last_backup'] + (self._interval_in_number(bqckup['options']['interval']) * 86400)).strftime('%d/%m/%Y 00:00:00')
@@ -93,6 +91,10 @@ class Bqckup:
             
     def get_last_log(self, name:str):
         return Log().select().where((Log.name == name) & (Log.status != Log.__FAILED__)).order_by(Log.id.desc()).first()
+        
+        
+    def get_last_db(self, name:str):
+        return Log.select().where((Log.name == name) & (Log.status != Log.__FAILED__) & (Log.type == Log.__DATABASE__)).order_by(Log.id.desc()).first()
         
     def get_logs(self, name: str):
         return list(Log().select().where(Log.name == name))
@@ -157,20 +159,18 @@ class Bqckup:
             if last_log:
                 last_backup_size = last_log.file_size
                 current_file_size = 0 
-                print(f"Last backup file size: {last_backup_size}")
                 
                 # Compress files
                 compressed_file = Tar().compress(backup.get('path'), compressed_file)
 
                 compressed_filename = os.path.basename(compressed_file)
                 print(f"Compressed file name: {compressed_filename}")
+                
 
                 if os.path.exists(compressed_file):
                     current_file_size = os.stat(compressed_file).st_size
-                    print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
-                    print("Please make sure, your set the right file / database for this backup")
-                    print(f"\nLast backup file size: {last_backup_size}")
-                    print(f"Current file size: {current_file_size}")
+                    print(f"\nLast backup file compressed size: {last_backup_size}")
+                    print(f"Current file compressed size: {current_file_size}")
 
                     if current_file_size == last_backup_size:
                      return False
@@ -186,14 +186,33 @@ class Bqckup:
 
                     Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
                     Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
-                    print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
+                    
             
-            sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
+            
             
             if backup.get('database'):
-                print("Exporting database...")
-                 # Database export
+                sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
+                database_filename = os.path.basename(sql_path)
+                print(f"\nExporting Database for {backup['name']}")
+                print(f"Database file name: {database_filename}")
                 
+                
+                last_log = self.get_last_db(backup['name'])
+                if last_log:
+                    last_backup_size = last_log.file_size
+
+                    # Check if current backup size is the same as the last backup size
+                    if last_backup_size is not None:
+                        sql_path_existing = last_log.file_path
+                        if os.path.exists(sql_path_existing):
+                            current_file_size = os.stat(sql_path_existing).st_size
+                            print(f"\nLast database backup size: {last_backup_size}")
+                            print(f"Current database backup size: {current_file_size}")
+                            if current_file_size == last_backup_size:
+                                print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
+                                print("Please make sure, your set the right file / database for this backup")
+                                return  # Exit function if no new backup is needed
+
                 log_database = Log().write({
                     "name": backup['name'],
                     "file_path": sql_path,
@@ -201,17 +220,18 @@ class Bqckup:
                     "type": Log.__DATABASE__,
                     "storage": backup['options']['storage']
                 })
-                
+
                 Database().export(
                     sql_path,
                     db_user=backup.get('database').get('user'),
                     db_password=backup.get('database').get('password'),
                     db_name=backup.get('database').get('name'),
                 )
-                
-                Log().update(file_size=os.stat(sql_path).st_size).where(Log.id == log_database.id).execute()
 
+                current_file_size = os.stat(sql_path).st_size
+                Log().update(file_size=current_file_size).where(Log.id == log_database.id).execute()
                 Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
+                print(f"Database backup for {backup['name']} completed: {os.path.basename(sql_path)}")
             
             if backup.get('options').get('provider') == 'local':
                 destination = backup.get('options').get('destination')
@@ -305,11 +325,9 @@ class Bqckup:
                                 shutil.move(sql_path, save_locally_path)
                             except Exception as e:
                                 print(f"Failed to save locally: {e}")
-                        
-                
-                    Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
+
             
-            print(f"\nBackup for {backup.get('name')} is done!\n")
+            print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
         except Exception as e:
             import traceback
             traceback.print_exc()

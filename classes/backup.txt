@@ -1,0 +1,43 @@
+ if backup.get('database'):
+                print("Exporting database...")
+                
+                last_log = self.get_last_log(backup['name'])
+                if last_log:
+                    last_backup_size = last_log.file_size
+                    print(f"Last database backup size: {last_backup_size}")
+
+                    # Check if current backup size is the same as the last backup size
+                    if last_backup_size is not None:
+                        sql_path_existing = last_log.file_path
+                        if os.path.exists(sql_path_existing):
+                            current_file_size = os.stat(sql_path_existing).st_size
+                            print(f"Last database backup size: {last_backup_size}")
+                            print(f"Current database backup size: {current_file_size}")
+                            if current_file_size == last_backup_size:
+                                print(f"No new database backup needed for {backup['name']} as file size matches the last backup.")
+                                return  # Exit function if no new backup is needed
+
+                log_database = Log().write({
+                    "name": backup['name'],
+                    "file_path": sql_path,
+                    "description": "Database Backup is in Progress",
+                    "type": Log.__DATABASE__,
+                    "storage": backup['options']['storage']
+                })
+
+                Database().export(
+                    sql_path,
+                    db_user=backup.get('database').get('user'),
+                    db_password=backup.get('database').get('password'),
+                    db_name=backup.get('database').get('name'),
+                )
+
+                current_file_size = os.stat(sql_path).st_size
+                Log().update(file_size=current_file_size).where(Log.id == log_database.id).execute()
+                Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
+                print(f"Database backup for {backup['name']} completed: {os.path.basename(sql_path)}")
+
+
+
+
+                print(f"Database backup for {backup['name']} completed: {os.path.basename(sql_path)}")
