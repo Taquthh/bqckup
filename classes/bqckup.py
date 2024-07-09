@@ -150,7 +150,9 @@ class Bqckup:
             
             if not File().is_exists(tmp_path):
                 os.makedirs(tmp_path)
-                
+            
+            
+            #File Backup    
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
 
             print(f"Compressing {backup['path'][0]} for {backup['name']}")
@@ -158,9 +160,8 @@ class Bqckup:
             last_log = self.get_last_log(backup['name'])
             if last_log:
                 last_backup_size = last_log.file_size
-                current_file_size = 0 
-                
-                # Compress files
+                current_file_size = compressed_file
+            
                 compressed_file = Tar().compress(backup.get('path'), compressed_file)
 
                 compressed_filename = os.path.basename(compressed_file)
@@ -187,31 +188,32 @@ class Bqckup:
                     Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
                     Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
                     
-            
-            
-            
+            #Database
             if backup.get('database'):
                 sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
-                database_filename = os.path.basename(sql_path)
+                
                 print(f"\nExporting Database for {backup['name']}")
-                print(f"Database file name: {database_filename}")
                 
                 
                 last_log = self.get_last_db(backup['name'])
                 if last_log:
-                    last_backup_size = last_log.file_size
+                    last_backup_size_db = last_log.file_size 
+                    
+                    database_filename = os.path.basename(sql_path)
+                    print(f"Database file name: {database_filename}")
+
 
                     # Check if current backup size is the same as the last backup size
-                    if last_backup_size is not None:
+                    if last_backup_size_db is not None:
                         sql_path_existing = last_log.file_path
                         if os.path.exists(sql_path_existing):
-                            current_file_size = os.stat(sql_path_existing).st_size
-                            print(f"\nLast database backup size: {last_backup_size}")
-                            print(f"Current database backup size: {current_file_size}")
-                            if current_file_size == last_backup_size:
+                            current_file_size_db = os.stat(sql_path_existing).st_size
+                            print(f"\nLast database backup size: {last_backup_size_db}")
+                            print(f"Current database backup size: {current_file_size_db}")
+                            if current_file_size_db == last_backup_size_db:
                                 print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
                                 print("Please make sure, your set the right file / database for this backup")
-                                return  # Exit function if no new backup is needed
+                                return False 
 
                 log_database = Log().write({
                     "name": backup['name'],
@@ -228,11 +230,12 @@ class Bqckup:
                     db_name=backup.get('database').get('name'),
                 )
 
-                current_file_size = os.stat(sql_path).st_size
-                Log().update(file_size=current_file_size).where(Log.id == log_database.id).execute()
+                current_file_size_db = os.stat(sql_path).st_size
+                Log().update(file_size=current_file_size_db).where(Log.id == log_database.id).execute()
                 Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
                 print(f"Database backup for {backup['name']} completed: {os.path.basename(sql_path)}")
             
+            #local save
             if backup.get('options').get('provider') == 'local':
                 destination = backup.get('options').get('destination')
                 backup_path = os.path.join(destination, backup_folder)
