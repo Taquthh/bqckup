@@ -13,6 +13,10 @@ from helpers import difference_in_days, get_today, time_since, get_server_ip
 from datetime import datetime
 from helpers.file_management import remove_folder
 from hashlib import sha256
+from lib.notifications.discord import send_notification
+import time
+from hashlib import sha256
+from configparser import ConfigParser
 class ConfigExceptions(Exception):
     pass
 
@@ -110,6 +114,7 @@ class Bqckup:
             backup = backups[i]
             # self.validate_config(backup['name'])
             last_log = self.get_last_log(backup['name'])
+            last_db = self.get_last_db(backup['name'])
             
             if last_log:
                 interval = backup['options']['interval']
@@ -159,7 +164,7 @@ class Bqckup:
 
             last_log = self.get_last_log(backup['name'])
             if last_log:
-                last_backup_size = last_log.file_size
+                last_backup_size = last_log.file_size 
                 current_file_size = compressed_file
             
                 compressed_file = Tar().compress(backup.get('path'), compressed_file)
@@ -197,7 +202,7 @@ class Bqckup:
                 
                 last_log = self.get_last_db(backup['name'])
                 if last_log:
-                    last_backup_size_db = last_log.file_size 
+                    last_backup_size_db = last_log.file_size
                     
                     database_filename = os.path.basename(sql_path)
                     print(f"Database file name: {database_filename}")
@@ -211,8 +216,25 @@ class Bqckup:
                             print(f"\nLast database backup size: {last_backup_size_db}")
                             print(f"Current database backup size: {current_file_size_db}")
                             if current_file_size_db == last_backup_size_db:
+                                from lib.notifications.discord import send_notification
                                 print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
                                 print("Please make sure, your set the right file / database for this backup")
+                                webhook_url = Config().read('notification', 'discord_webhook_url')
+                                if webhook_url:
+                                    send_notification({
+                                                        "embeds": [{
+                                                            "title": "Bqckup Failed",
+                                                            "description": "This is an automated notification to inform you that the bqckup has failed.",
+                                                            "color": 15548997,
+                                                            "fields": [
+                                                                {"name": "Server IP", "value": get_server_ip(), "inline": True},
+                                                                {"name": "Name", "value": backup.get('name'), "inline": True},
+                                                                {"name": "Date", "value": get_today(format="%d-%B-%Y"), "inline": True},
+                                                                {"name": "Details", "value": "Please make sure, your set the right file / database for this backup", "inline": False}
+                                                            ],
+                                                            "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
+                                                        }]
+                                                    })
                                 return False 
 
                 log_database = Log().write({
@@ -222,6 +244,7 @@ class Bqckup:
                     "type": Log.__DATABASE__,
                     "storage": backup['options']['storage']
                 })
+
 
                 Database().export(
                     sql_path,
@@ -346,9 +369,14 @@ class Bqckup:
                 Log().update_status(log_database.id, Log.__FAILED__, f"Database Backup Failed: {e}")
                 
             
-            should_send_notification = Config().read('notification', 'enabled')
-            if should_send_notification == '1':
-                from lib.notifications.discord import send_notification
+                
+            
+            if current_file_size == last_backup_size:
+                print(f"\nFile size has not changed since last backup.")
+                # Send notification to Discord
+                should_send_notification = Config().read('notification', 'enabled')
+                if should_send_notification == '1':
+                    from lib.notifications.discord import send_notification
                 
                 payload = {
                     "embeds": [{
