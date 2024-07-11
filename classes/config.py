@@ -13,3 +13,5 @@ class Config:
             print(f"Failed to read config, {str(e)}")
             print(f"Check if {CONFIG_PATH} exists and has the correct format")
             return default
+        
+        

@@ -24,4 +24,4 @@ enabled=0
 channel=discord
 
 ; Webhook URL
-discord_webhook_url=
+discord_webhook_url=https://discordapp.com/api/webhooks/1260428780711837767/viocimoztL2onWM4B1nger4MhiLdAZbYDyY2_Ob29CeNGylt3dabbSzdCR0rKGEuoWxi
