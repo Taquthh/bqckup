@@ -114,7 +114,6 @@ class Bqckup:
             backup = backups[i]
             # self.validate_config(backup['name'])
             last_log = self.get_last_log(backup['name'])
-            last_db = self.get_last_db(backup['name'])
             
             if last_log:
                 interval = backup['options']['interval']
@@ -160,38 +159,60 @@ class Bqckup:
             #File Backup    
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
 
+
             print(f"Compressing {backup['path'][0]} for {backup['name']}")
 
-            last_log = self.get_last_log(backup['name'])
-            if last_log:
-                last_backup_size = last_log.file_size 
-                current_file_size = compressed_file
-            
-                compressed_file = Tar().compress(backup.get('path'), compressed_file)
+            log_compressed_files = Log().write({
+                "name": backup['name'],
+                "file_path": compressed_file,
+                "description": "File backup is in progress...",
+                "description": f"File backup is in progress: {os.path.basename(compressed_file)}",
+                "type": Log.__FILES__,
+                "storage": backup['options']['storage']
+            })
 
-                compressed_filename = os.path.basename(compressed_file)
-                print(f"Compressed file name: {compressed_filename}")
-                
+            print(f"\nCompressing file for {backup['name']}")
 
-                if os.path.exists(compressed_file):
-                    current_file_size = os.stat(compressed_file).st_size
-                    print(f"\nLast backup file compressed size: {last_backup_size}")
-                    print(f"Current file compressed size: {current_file_size}")
 
-                    if current_file_size == last_backup_size:
-                     return False
+            compressed_file = Tar().compress(backup.get('path'), compressed_file)
 
-                    # Write initial log for file compression
-                    log_compressed_files = Log().write({
-                        "name": backup['name'],
-                        "file_path": compressed_file,
-                        "description": f"File backup is in progress: {os.path.basename(compressed_file)}",
-                        "type": Log.__FILES__,
-                        "storage": backup['options']['storage']
-                    })
+            Log().update(file_size=os.stat(compressed_file).st_size).where(Log.id == log_compressed_files.id).execute()
 
-                    Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
-                    Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+            if os.path.exists(compressed_file):
+                current_file_size = os.stat(compressed_file).st_size
+                Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
+                Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+                print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
+
+                last_log = self.get_last_log(backup['name'])
+                if last_log:
+                    last_backup_size = last_log.file_size
+                    if last_backup_size is not None:
+                        print(f"\nCurrent file size: {current_file_size}")
+                        print(f"Last backup size: {last_backup_size}")
+                        if current_file_size == last_backup_size:
+                            from lib.notifications.discord import send_notification
+                            compressed_filename = os.path.basename(compressed_file)
+                        webhook_url = Config().read('notification', 'discord_webhook_url')
+                        if webhook_url:
+                                    send_notification({
+                                                        "embeds": [{
+                                                            "title": "Bqckup File Failed",
+                                                            "description": "This is an automated notification to inform you that the bqckup has failed.",
+                                                            "color": 15548997,
+                                                            "fields": [
+                                                            {"name": "Date",  "value": get_today(format="%d-%B-%Y"), "inline":True},     
+                                                            {"name": "Name", "value": backup.get('name'), "inline": True},
+                                                            {"name": "Server IP", "value": get_server_ip(), "inline": True},
+                                                            {"name": "File Backup", "value": compressed_filename, "inline": True}, 
+                                                            {"name": "Details", "value": "Please make sure, your set the right file for this backup", "inline": False}
+                                                            ],
+                                                            "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
+                                                        }]
+                                                    })
+
+                        Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
+                        Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
                     
             #Database
             if backup.get('database'):
@@ -223,14 +244,15 @@ class Bqckup:
                                 if webhook_url:
                                     send_notification({
                                                         "embeds": [{
-                                                            "title": "Bqckup Failed",
+                                                            "title": "Bqckup Database Failed",
                                                             "description": "This is an automated notification to inform you that the bqckup has failed.",
                                                             "color": 15548997,
                                                             "fields": [
-                                                                {"name": "Server IP", "value": get_server_ip(), "inline": True},
-                                                                {"name": "Name", "value": backup.get('name'), "inline": True},
-                                                                {"name": "Date", "value": get_today(format="%d-%B-%Y"), "inline": True},
-                                                                {"name": "Details", "value": "Please make sure, your set the right file / database for this backup", "inline": False}
+                                                            {"name": "Date",  "value": get_today(format="%d-%B-%Y"), "inline":True},     
+                                                            {"name": "Name", "value": backup.get('name'), "inline": True},
+                                                            {"name": "Server IP", "value": get_server_ip(), "inline": True},
+                                                            {"name": "Database File", "value": database_filename, "inline": True}, 
+                                                            {"name": "Details", "value": "Please make sure, your set the right database for this backup", "inline": False}
                                                             ],
                                                             "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
                                                         }]
@@ -371,33 +393,32 @@ class Bqckup:
             
                 
             
-            if current_file_size == last_backup_size:
-                print(f"\nFile size has not changed since last backup.")
-                # Send notification to Discord
-                should_send_notification = Config().read('notification', 'enabled')
-                if should_send_notification == '1':
-                    from lib.notifications.discord import send_notification
+            # if current_file_size == last_backup_size:
+            #     print(f"\nFile size has not changed since last backup.")
+            #     should_send_notification = Config().read('notification', 'enabled')
+            #     if should_send_notification == '1':
+            #         from lib.notifications.discord import send_notification
                 
-                payload = {
-                    "embeds": [{
-                        "title": f"Bqckup Failed",
-                        "description": f"This is an automated notification to inform you that the bqckup has failed.",
-                        "color": 15548997,
-                        "fields": [
-                            {"name": "Server IP", "value": get_server_ip(), "inline": True},
-                            {"name": "Name", "value": backup.get('name'), "inline": True},
-                            {"name": "Date", "value": get_today(format="%d-%B-%Y"), "inline":True},
-                            {"name": "Details", "value": f"{e}", "inline": False}
-                        ],
-                        "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
-                    }]
-                }
+            #     payload = {
+            #         "embeds": [{
+            #             "title": f"Bqckup Failed",
+            #             "description": f"This is an automated notification to inform you that the bqckup has failed.",
+            #             "color": 15548997,
+            #             "fields": [
+            #                 {"name": "Server IP", "value": get_server_ip(), "inline": True},
+            #                 {"name": "Name", "value": backup.get('name'), "inline": True},
+            #                 {"name": "Date", "value": get_today(format="%d-%B-%Y"), "inline":True},
+            #                 {"name": "Details", "value": f"{e}", "inline": False}
+            #             ],
+            #             "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
+            #         }]
+            #     }
                 
-                hashed_payload = sha256(str(payload).encode()).hexdigest()
+            #     hashed_payload = sha256(str(payload).encode()).hexdigest()
                 
-                if not NotificationLog().select().where(NotificationLog.hash == hashed_payload).exists():
-                    send_notification(payload)
-                    NotificationLog().create(hash=hashed_payload, sent_at=int(time.time()))
+            #     if not NotificationLog().select().where(NotificationLog.hash == hashed_payload).exists():
+            #         send_notification(payload)
+            #         NotificationLog().create(hash=hashed_payload, sent_at=int(time.time()))
                 
             print(f"[{backup.get('name')}] Error: {e}.")
     
