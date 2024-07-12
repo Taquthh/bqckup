@@ -155,12 +155,11 @@ class Bqckup:
             if not File().is_exists(tmp_path):
                 os.makedirs(tmp_path)
             
-            
             #File Backup        
+            print(f"Compressing {backup['path'][0]} for {backup['name']}")
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
             compressed_file = Tar().compress(backup.get('path'), compressed_file)
             
-            print(f"Compressing {backup['path'][0]} for {backup['name']}")
             
             last_log = self.get_last_log(backup['name'])
             if last_log:
@@ -178,9 +177,6 @@ class Bqckup:
                         "type": Log.__FILES__,
                         "storage": backup['options']['storage']
                     })
-                    
-                    # Compress the file
-                    compressed_file = Tar().compress(backup.get('path'), compressed_file)
 
                     # Update log with compressed file size
                     Log().update(file_size=os.stat(compressed_file).st_size).where(Log.id == log_compressed_files.id).execute()
@@ -238,6 +234,7 @@ class Bqckup:
                             print(f"\nLast database backup size: {last_backup_size_db}")
                             print(f"Current database backup size: {current_file_size_db}")
                             if current_file_size_db == last_backup_size_db:
+
                                 from lib.notifications.discord import send_notification
                                 print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
                                 print("Please make sure, your set the right file / database for this backup")
