@@ -13,7 +13,8 @@ bqckup:
     storage: dummy
     interval: daily
     retention: '7'
-    save_locally: no
+    save_locally: yes
     save_locally_path: /mnt/c/users/lenovo/downloads/belajar_qu/task/bqckup/tmp
     notification_email: email@example.com
-    provider: s3
+    provider: local
+    destination: /mnt/c/users/lenovo/downloads/belajar_qu/task/bqckup/backup

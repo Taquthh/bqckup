@@ -2,6 +2,12 @@
 ; Port to listen on for the web interface
 port=9393
 
+[client]
+user = your_username
+password = your_password
+host = your_host
+port = your_port
+
 [auth]
 ; Authentication password for the web interface
 password="bqckup"

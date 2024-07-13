@@ -94,7 +94,7 @@ class Bqckup:
         return results
             
     def get_last_log(self, name:str):
-        return Log().select().where((Log.name == name) & (Log.status != Log.__FAILED__)).order_by(Log.id.desc()).first()
+        return Log().select().where((Log.name == name) & (Log.status != Log.__FAILED__) & (Log.type == Log.__FILES__)).order_by(Log.id.desc()).first()
         
         
     def get_last_db(self, name:str):
@@ -165,7 +165,7 @@ class Bqckup:
                 last_backup_size = last_log.file_size
                 if last_backup_size is not None and current_file_size == last_backup_size:
                     print(f"Backup file name: {os.path.basename(compressed_file)}")
-                    print(f"Current file size: {current_file_size}")
+                    print(f"\nCurrent file size: {current_file_size}")
                     print(f"Last backup size: {last_backup_size}")
                     webhook_url = Config().read('notification', 'discord_webhook_url')
                     if webhook_url:
@@ -200,36 +200,6 @@ class Bqckup:
                 print(f"Exporting Database for {backup['name']}")
                 sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
 
-                last_log_db = self.get_last_db(backup['name'])
-                if last_log_db:
-                    last_backup_size_db = last_log_db.file_size
-                    if last_backup_size_db is not None:
-                        sql_path_existing = last_log_db.file_path
-                        if os.path.exists(sql_path_existing):
-                            current_file_size_db = os.stat(sql_path_existing).st_size
-
-                            if current_file_size_db == last_backup_size_db:
-                                print(f"Last database backup size: {last_backup_size_db}")
-                                print(f"Current database backup size: {current_file_size_db}")
-                                webhook_url = Config().read('notification', 'discord_webhook_url')
-                                if webhook_url:
-                                    send_notification({
-                                        "embeds": [{
-                                            "title": "Bqckup Database Failed",
-                                            "description": "This is an automated notification to inform you that the bqckup has failed.",
-                                            "color": 15548997,
-                                            "fields": [
-                                                {"name": "Date", "value": get_today(format='%d-%B-%Y'), "inline": True},
-                                                {"name": "Name", "value": backup.get('name'), "inline": True},
-                                                {"name": "Server IP", "value": get_server_ip(), "inline": True},
-                                                {"name": "Database File", "value": os.path.basename(sql_path_existing), "inline": True},
-                                                {"name": "Details", "value": "Please make sure you have set the correct database for this backup.", "inline": False}
-                                            ],
-                                            "footer": {"text": "If this was a mistake, please create an issue here: https://github.com/bqckup/bqckup"}
-                                        }]
-                                    })
-                                return False
-
                 Database().export(
                     sql_path,
                     db_user=backup.get('database').get('user'),
@@ -237,12 +207,41 @@ class Bqckup:
                     db_name=backup.get('database').get('name'),
                 )
 
+                current_file_size_db = os.stat(sql_path).st_size
+                last_log_db = self.get_last_db(backup['name'])
+                if last_log_db:
+                    last_backup_size_db = last_log_db.file_size
+                    if last_backup_size_db is not None and current_file_size_db == last_backup_size_db:
+                        print(f"Database file name: {os.path.basename(sql_path)}")
+                        print(f"Last database backup size: {last_backup_size_db}")
+                        print(f"Current database backup size: {current_file_size_db}")
+                        print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
+                        print("Please make sure, your set the right file / database for this backup")
+                        webhook_url = Config().read('notification', 'discord_webhook_url')
+                        if webhook_url:
+                            send_notification({
+                                "embeds": [{
+                                    "title": "Bqckup Database Failed",
+                                    "description": "This is an automated notification to inform you that the bqckup has failed.",
+                                    "color": 15548997,
+                                    "fields": [
+                                        {"name": "Date", "value": get_today(format='%d-%B-%Y'), "inline": True},
+                                        {"name": "Name", "value": backup.get('name'), "inline": True},
+                                        {"name": "Server IP", "value": get_server_ip(), "inline": True},
+                                        {"name": "Database File", "value": os.path.basename(sql_path), "inline": True},
+                                        {"name": "Details", "value": "Please make sure you have set the correct database for this backup.", "inline": False}
+                                    ],
+                                    "footer": {"text": "If this was a mistake, please create an issue here: https://github.com/bqckup/bqckup"}
+                                }]
+                            })
+                        return False
+
                 log_database = Log().write({
                     "name": backup['name'],
                     "file_path": sql_path,
                     "description": "Database Backup is in Progress",
                     "type": Log.__DATABASE__,
-                    "file_size": os.stat(sql_path).st_size,
+                    "file_size": current_file_size_db,
                     "storage": backup['options']['storage']
                 })
 
@@ -263,14 +262,15 @@ class Bqckup:
                     Log().update_status(log_compressed_files.id, Log.__FAILED__, "File Backup Failed: Compressed file does not exist or could not be moved.")
                     print(f"Compressed file {compressed_file} does not exist or could not be moved.")
 
-                if os.path.exists(sql_path):
-                    shutil.move(sql_path, os.path.join(backup_path, os.path.basename(sql_path)))
-                    current_file_size_db = os.stat(os.path.join(backup_path, os.path.basename(sql_path))).st_size
-                    Log().update(file_size=current_file_size_db).where(Log.id == log_database.id).execute()
-                    Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
-                else:
-                    Log().update_status(log_database.id, Log.__FAILED__, "Database Backup Failed: SQL file does not exist or could not be moved.")
-                    print(f"SQL file {sql_path} does not exist or could not be moved.")
+                if backup.get('database'):
+                    if os.path.exists(sql_path):
+                        shutil.move(sql_path, os.path.join(backup_path, os.path.basename(sql_path)))
+                        current_file_size_db = os.stat(os.path.join(backup_path, os.path.basename(sql_path))).st_size
+                        Log().update(file_size=current_file_size_db).where(Log.id == log_database.id).execute()
+                        Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
+                    else:
+                        Log().update_status(log_database.id, Log.__FAILED__, "Database Backup Failed: SQL file does not exist or could not be moved.")
+                        print(f"SQL file {sql_path} does not exist or could not be moved.")
 
                 should_save_locally = backup.get('options').get('save_locally')
                 save_locally_path = backup.get('options').get('save_locally_path')
@@ -289,16 +289,17 @@ class Bqckup:
                             save_locally_path = os.path.join(save_locally_path, backup.get('name'))
                             if not os.path.isdir(save_locally_path):
                                 os.makedirs(save_locally_path)
-                            if os.path.exists(compressed_file):
-                                shutil.move(compressed_file, save_locally_path)
-                            if os.path.exists(sql_path):
-                                shutil.move(sql_path, save_locally_path)
+                            if os.path.exists(os.path.join(backup_path, os.path.basename(compressed_file))):
+                                shutil.move(os.path.join(backup_path, os.path.basename(compressed_file)), save_locally_path)
+                            if os.path.exists(os.path.join(backup_path, os.path.basename(sql_path))):
+                                shutil.move(os.path.join(backup_path, os.path.basename(sql_path)), save_locally_path)
                         except Exception as e:
                             print(f"Failed to save locally: {e}")
 
             print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
             if backup.get('database'):
                 print(f"Database backup for {backup['name']} completed: {os.path.basename(sql_path)}")
+
         
         except Exception as e:
             import traceback
