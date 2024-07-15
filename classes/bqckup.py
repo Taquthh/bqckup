@@ -161,43 +161,44 @@ class Bqckup:
 
             current_file_size = os.stat(compressed_file).st_size
             last_log = self.get_last_log(backup['name'])
-            if last_log:
-                last_backup_size = last_log.file_size
-                if last_backup_size is not None and current_file_size == last_backup_size:
-                    print(f"Backup file name: {os.path.basename(compressed_file)}")
-                    print(f"\nCurrent file size: {current_file_size}")
-                    print(f"Last backup size: {last_backup_size}")
-                    webhook_url = Config().read('notification', 'discord_webhook_url')
-                    if webhook_url:
-                        send_notification({
-                            "embeds": [{
-                                "title": "Bqckup File Failed",
-                                "description": "This is an automated notification to inform you that the bqckup has failed.",
-                                "color": 15548997,
-                                "fields": [
-                                    {"name": "Date", "value": get_today(format='%d-%B-%Y'), "inline": True},
-                                    {"name": "Name", "value": backup.get('name'), "inline": True},
-                                    {"name": "Server IP", "value": get_server_ip(), "inline": True},
-                                    {"name": "File Backup", "value": os.path.basename(compressed_file), "inline": True},
-                                    {"name": "Details", "value": "Please make sure you have set the correct file for this backup.", "inline": False}
-                                ],
-                                "footer": {"text": "If this was a mistake, please create an issue here: https://github.com/bqckup/bqckup"}
-                            }]
-                        })
-                    return False
-
-            log_compressed_files = Log().write({
-                "name": backup['name'],
-                "file_path": compressed_file,
-                "description": "File backup is in progress...",
-                "type": Log.__FILES__,
-                "file_size": current_file_size,
-                "storage": backup['options']['storage']
-            })
+            if last_log and last_log.file_size is not None and current_file_size == last_log.file_size:
+                print(f"Backup file name: {os.path.basename(compressed_file)}")
+                print(f"\nCurrent file size: {current_file_size}")
+                print(f"Last backup size: {last_log.file_size}")
+                from lib.notifications.discord import send_notification
+                webhook_url = Config().read('notification', 'discord_webhook_url')
+                compressed_filename = os.path.basename(compressed_file)
+                if webhook_url:
+                    send_notification({
+                                "embeds": [{
+                                    "title": "Bqckup File Failed",
+                                    "description": "This is an automated notification to inform you that the bqckup has failed.",
+                                    "color": 15548997,
+                                    "fields": [
+                                        {"name": "Date",  "value": get_today(format="%d-%B-%Y"), "inline":True},     
+                                        {"name": "Name", "value": backup.get('name'), "inline": True},
+                                        {"name": "Server IP", "value": get_server_ip(), "inline": True},
+                                        {"name": "File Backup", "value": compressed_filename, "inline": True}, 
+                                        {"name": "Details", "value": "Please make sure, your set the right file for this backup", "inline": False}
+                                    ],
+                                    "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
+                                }]
+                            })
+                
+            else:
+                print("Writing log for file backup in progress...")
+                log_compressed_files = Log().write({
+                    "name": backup['name'],
+                    "file_path": compressed_file,
+                    "description": "File backup is in progress...",
+                    "type": Log.__FILES__,
+                    "file_size": current_file_size,
+                    "storage": backup['options']['storage']
+                })
 
             # Database Backup
             if backup.get('database'):
-                print(f"Exporting Database for {backup['name']}")
+                print(f"\nExporting Database for {backup['name']}")
                 sql_path = os.path.join(tmp_path, f"{int(time.time())}.sql.gz")
 
                 Database().export(
@@ -209,34 +210,34 @@ class Bqckup:
 
                 current_file_size_db = os.stat(sql_path).st_size
                 last_log_db = self.get_last_db(backup['name'])
-                if last_log_db:
-                    last_backup_size_db = last_log_db.file_size
-                    if last_backup_size_db is not None and current_file_size_db == last_backup_size_db:
-                        print(f"Database file name: {os.path.basename(sql_path)}")
-                        print(f"Last database backup size: {last_backup_size_db}")
-                        print(f"Current database backup size: {current_file_size_db}")
-                        print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
-                        print("Please make sure, your set the right file / database for this backup")
-                        webhook_url = Config().read('notification', 'discord_webhook_url')
-                        if webhook_url:
-                            send_notification({
-                                "embeds": [{
-                                    "title": "Bqckup Database Failed",
-                                    "description": "This is an automated notification to inform you that the bqckup has failed.",
-                                    "color": 15548997,
-                                    "fields": [
-                                        {"name": "Date", "value": get_today(format='%d-%B-%Y'), "inline": True},
-                                        {"name": "Name", "value": backup.get('name'), "inline": True},
-                                        {"name": "Server IP", "value": get_server_ip(), "inline": True},
-                                        {"name": "Database File", "value": os.path.basename(sql_path), "inline": True},
-                                        {"name": "Details", "value": "Please make sure you have set the correct database for this backup.", "inline": False}
-                                    ],
-                                    "footer": {"text": "If this was a mistake, please create an issue here: https://github.com/bqckup/bqckup"}
-                                }]
-                            })
-                        return False
-
-                log_database = Log().write({
+                if last_log_db and last_log_db.file_size is not None and current_file_size_db == last_log_db.file_size:
+                    print(f"Database file name: {os.path.basename(sql_path)}")
+                    print(f"\nLast database backup size: {last_log_db.file_size}")
+                    print(f"Current database backup size: {current_file_size_db}")
+                    print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
+                    print("Please make sure, your set the right file / database for this backup")
+                    database_filename = os.path.basename(sql_path)
+                    webhook_url = Config().read('notification', 'discord_webhook_url')
+                    if webhook_url:
+                        send_notification({
+                                        "embeds": [{
+                                            "title": "Bqckup Database Failed",
+                                            "description": "This is an automated notification to inform you that the bqckup has failed.",
+                                            "color": 15548997,
+                                            "fields": [
+                                            {"name": "Date",  "value": get_today(format="%d-%B-%Y"), "inline":True},     
+                                            {"name": "Name", "value": backup.get('name'), "inline": True},
+                                            {"name": "Server IP", "value": get_server_ip(), "inline": True},
+                                            {"name": "Database File", "value": database_filename, "inline": True}, 
+                                            {"name": "Details", "value": "Please make sure, your set the right database for this backup", "inline": False}
+                                            ],
+                                            "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
+                                                        }]
+                                    })
+                    return False
+                else:
+                    print("Writing log for database backup in progress...")
+                    log_database = Log().write({
                     "name": backup['name'],
                     "file_path": sql_path,
                     "description": "Database Backup is in Progress",
@@ -256,21 +257,21 @@ class Bqckup:
                 if os.path.exists(compressed_file):
                     shutil.move(compressed_file, os.path.join(backup_path, os.path.basename(compressed_file)))
                     current_file_size = os.stat(os.path.join(backup_path, os.path.basename(compressed_file))).st_size
-                    Log().update(file_size=current_file_size).where(Log.id == log_compressed_files.id).execute()
-                    Log().update_status(log_compressed_files.id, Log.__SUCCESS__, "File Backup Success")
+                    Log().update(file_size=current_file_size).where((Log.id == log_compressed_files.id) & (Log.type == Log.__FILES__)).execute()
+                    Log().update(status=Log.__SUCCESS__, description="File Backup Success").where((Log.id == log_compressed_files.id) & (Log.type == Log.__FILES__)).execute()
                 else:
-                    Log().update_status(log_compressed_files.id, Log.__FAILED__, "File Backup Failed: Compressed file does not exist or could not be moved.")
+                    Log().update(status=Log.__FAILED__, description="File Backup Failed: Compressed file does not exist or could not be moved.").where((Log.id == log_compressed_files.id) & (Log.type == Log.__FILES__)).execute()
                     print(f"Compressed file {compressed_file} does not exist or could not be moved.")
 
                 if backup.get('database'):
                     if os.path.exists(sql_path):
                         shutil.move(sql_path, os.path.join(backup_path, os.path.basename(sql_path)))
                         current_file_size_db = os.stat(os.path.join(backup_path, os.path.basename(sql_path))).st_size
-                        Log().update(file_size=current_file_size_db).where(Log.id == log_database.id).execute()
-                        Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success")
+                        Log().update(file_size=current_file_size_db).where((Log.id == log_database.id) & (Log.type == Log.__DATABASE__)).execute()
+                        Log().update(status=Log.__SUCCESS__, description="Database Backup Success").where((Log.id == log_database.id) & (Log.type == Log.__DATABASE__)).execute()
                     else:
-                        Log().update_status(log_database.id, Log.__FAILED__, "Database Backup Failed: SQL file does not exist or could not be moved.")
-                        print(f"SQL file {sql_path} does not exist or could not be moved.")
+                        Log().update(status=Log.__FAILED__, description="Database Backup Failed: SQL file does not exist or could not be moved.").where((Log.id == log_database.id) & (Log.type == Log.__DATABASE__)).execute()
+                        print(f"SQL file {sql_path} does not exist atau could not be moved.")
 
                 should_save_locally = backup.get('options').get('save_locally')
                 save_locally_path = backup.get('options').get('save_locally_path')
@@ -281,7 +282,7 @@ class Bqckup:
                     if os.path.exists(os.path.join(backup_path, os.path.basename(sql_path))):
                         os.unlink(os.path.join(backup_path, os.path.basename(sql_path)))
                 elif should_save_locally and save_locally_path:
-                    print("Saving locally ...")
+                    print("\nSaving locally ...")
                     if not os.path.isdir(save_locally_path):
                         raise Exception(f"Save locally path {save_locally_path} is not a directory")
                     else:
@@ -296,25 +297,27 @@ class Bqckup:
                         except Exception as e:
                             print(f"Failed to save locally: {e}")
 
-            print(f"Backup for {backup['name']} completed: {os.path.basename(compressed_file)}")
+            print(f"\nBackup for {backup['name']} completed: {os.path.basename(compressed_file)}")
             if backup.get('database'):
                 print(f"Database backup for {backup['name']} completed: {os.path.basename(sql_path)}")
 
-        
         except Exception as e:
             import traceback
             traceback.print_exc()
 
             # If backup failed remove the tmp folder
             remove_folder(tmp_path)
-            
+
             # Separate this two error by it's own exceptions
             if 'log_compressed_files' in locals():
-                Log().update_status(log_compressed_files.id, Log.__FAILED__, f"File Backup Failed: {e}")
+                Log().update(status=Log.__FAILED__, description=f"File Backup Failed: {e}").where((Log.id == log_compressed_files.id) & (Log.type == Log.__FILES__)).execute()
                 
             if 'log_database' in locals():
-                Log().update_status(log_database.id, Log.__FAILED__, f"Database Backup Failed: {e}")
+                Log().update(status=Log.__FAILED__, description=f"Database Backup Failed: {e}").where((Log.id == log_database.id) & (Log.type == Log.__DATABASE__)).execute()
+            
             print(f"[{backup.get('name')}] Error: {e}.")
+
+
     
     def remove(self):
         pass
