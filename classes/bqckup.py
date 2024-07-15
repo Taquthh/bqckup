@@ -161,12 +161,15 @@ class Bqckup:
 
             current_file_size = os.stat(compressed_file).st_size
             last_log = self.get_last_log(backup['name'])
+            
             log_compressed_files = None  # Initialize the variable
 
             if last_log and last_log.file_size is not None and current_file_size == last_log.file_size:
                 print(f"Backup file name: {os.path.basename(compressed_file)}")
                 print(f"\nCurrent file size: {current_file_size}")
                 print(f"Last backup size: {last_log.file_size}")
+                print(f"\nSorry, unable to do backup file for {backup['name']}, current file size is exactly same as before.")
+                print("Please make sure, your set the right file for this backup")
                 webhook_url = Config().read('notification', 'discord_webhook_url')
                 compressed_filename = os.path.basename(compressed_file)
                 if webhook_url:
@@ -208,17 +211,19 @@ class Bqckup:
                     db_password=backup.get('database').get('password'),
                     db_name=backup.get('database').get('name'),
                 )
+                
 
                 current_file_size_db = os.stat(sql_path).st_size
                 last_log_db = self.get_last_db(backup['name'])
+                
                 log_database = None  # Initialize the variable
 
                 if last_log_db and last_log_db.file_size is not None and current_file_size_db == last_log_db.file_size:
                     print(f"Database file name: {os.path.basename(sql_path)}")
                     print(f"\nLast database backup size: {last_log_db.file_size}")
                     print(f"Current database backup size: {current_file_size_db}")
-                    print(f"\nSorry, unable to do backup for {backup['name']}, current file size is exactly same as before.")
-                    print("Please make sure, your set the right file / database for this backup")
+                    print(f"\nSorry, unable to do backup database for {backup['name']}, current database size is exactly same as before.")
+                    print("Please make sure, your set the right database for this backup")
                     database_filename = os.path.basename(sql_path)
                     webhook_url = Config().read('notification', 'discord_webhook_url')
                     if webhook_url:
@@ -307,12 +312,26 @@ class Bqckup:
                         raise Exception(f"Save locally path {save_locally_path} is not a directory")
                     else:
                         try:
+                            file_saved = False
+                            db_saved = False
+                            
                             if os.path.exists(os.path.join(backup_path, os.path.basename(compressed_file))):
-                                shutil.copy(os.path.join(backup_path, os.path.basename(compressed_file)), save_locally_path)
+                                if 'log_compressed_files' in locals() and log_compressed_files is not None:
+                                    shutil.copy(os.path.join(backup_path, os.path.basename(compressed_file)), save_locally_path)
+                                    file_saved = True
                             if os.path.exists(os.path.join(backup_path, os.path.basename(sql_path))):
-                                shutil.copy(os.path.join(backup_path, os.path.basename(sql_path)), save_locally_path)
+                                if 'log_database' in locals() and log_database is not None:
+                                    shutil.copy(os.path.join(backup_path, os.path.basename(sql_path)), save_locally_path)
+                                    db_saved = True
+                            
+                            if file_saved:
+                                print(f"\nSuccessfully saved {os.path.basename(compressed_file)} to {save_locally_path}")
+                            if db_saved:
+                                print(f"\nSuccessfully saved {os.path.basename(sql_path)} to {save_locally_path}")
+
                         except Exception as e:
                             print(f"Failed to save locally: {e}")
+
 
                             
         except Exception as e:
