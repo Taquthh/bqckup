@@ -188,6 +188,7 @@ class Bqckup:
                                     "footer": {"text": "If this was a mistake, please create issue here: https://github.com/bqckup/bqckup"}
                                 }]
                             })
+                    return False
             
             else:
                 print("Writing log for file backup in progress...")
@@ -328,11 +329,9 @@ class Bqckup:
                                 print(f"\nSuccessfully saved {os.path.basename(compressed_file)} to {save_locally_path}")
                             if db_saved:
                                 print(f"\nSuccessfully saved {os.path.basename(sql_path)} to {save_locally_path}")
-
+                                
                         except Exception as e:
                             print(f"Failed to save locally: {e}")
-
-
                             
         except Exception as e:
             if log_compressed_files:
@@ -341,9 +340,6 @@ class Bqckup:
                 Log().update(status=Log.__FAILED__, description=f"Database Backup Failed: {str(e)}").where((Log.id == log_database.id) & (Log.type == Log.__DATABASE__)).execute()
             print(e)
             return False
-
-
-
     
     def remove(self):
         pass
